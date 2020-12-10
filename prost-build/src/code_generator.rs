@@ -288,6 +288,46 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
+    fn append_field_type_attributes(
+        &mut self,
+        msg_name: &str,
+        field_type_name: &str,
+        optional: bool,
+    ) {
+        let type_name = if optional {
+            format!("::core::option::Option<{}>", field_type_name)
+        } else {
+            field_type_name.to_string()
+        };
+
+        for (matcher, attribute) in self.config.field_type_attributes.clone() {
+            if Self::match_field(&matcher, msg_name, &type_name) {
+                self.push_indent();
+                self.buf.push_str(&attribute);
+                self.buf.push('\n');
+            }
+        }
+    }
+
+    fn match_field(matcher: &str, msg: &str, field_type_name: &str) -> bool {
+        assert_eq!(b'.', msg.as_bytes()[0]);
+
+        println!(
+            "{} - {}: {}",
+            matcher,
+            field_type_name,
+            matcher == field_type_name
+        );
+
+        if matcher.is_empty() {
+            return false;
+        } else if matcher == "." {
+            return true;
+        }
+
+        matcher == field_type_name
+    }
+
     fn append_field(&mut self, msg_name: &str, field: FieldDescriptorProto) {
         let type_ = field.r#type();
         let repeated = field.label == Some(Label::Repeated as i32);
@@ -387,6 +427,7 @@ impl<'a> CodeGenerator<'a> {
 
         self.buf.push_str("\")]\n");
         self.append_field_attributes(msg_name, field.name());
+        self.append_field_type_attributes(msg_name, &ty, optional);
         self.push_indent();
         self.buf.push_str("pub ");
         self.buf.push_str(&to_snake(field.name()));
@@ -576,7 +617,9 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn append_doc(&mut self) {
-        Comments::from_location(self.location()).append_with_indent(self.depth, &mut self.buf);
+        if !self.config.disable_comments {
+            Comments::from_location(self.location()).append_with_indent(self.depth, &mut self.buf);
+        }
     }
 
     fn append_enum(&mut self, desc: EnumDescriptorProto) {

@@ -188,11 +188,13 @@ pub struct Config {
     bytes: Vec<String>,
     type_attributes: Vec<(String, String)>,
     field_attributes: Vec<(String, String)>,
+    field_type_attributes: Vec<(String, String)>,
     prost_types: bool,
     strip_enum_prefix: bool,
     out_dir: Option<PathBuf>,
     extern_paths: Vec<(String, String)>,
     protoc_args: Vec<OsString>,
+    disable_comments: bool,
 }
 
 impl Config {
@@ -344,6 +346,16 @@ impl Config {
         A: AsRef<str>,
     {
         self.field_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    pub fn field_type_attribute<P, A>(&mut self, path: P, attribute: A) -> &mut Self
+    where
+        P: AsRef<str>,
+        A: AsRef<str>,
+    {
+        self.field_type_attributes
             .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
         self
     }
@@ -567,6 +579,11 @@ impl Config {
         self
     }
 
+    pub fn disable_comments(&mut self) -> &mut Self {
+        self.disable_comments = true;
+        self
+    }
+
     /// Compile `.proto` files into Rust files during a Cargo build with additional code generator
     /// configuration options.
     ///
@@ -715,11 +732,13 @@ impl default::Default for Config {
             bytes: Vec::new(),
             type_attributes: Vec::new(),
             field_attributes: Vec::new(),
+            field_type_attributes: Vec::new(),
             prost_types: true,
             strip_enum_prefix: true,
             out_dir: None,
             extern_paths: Vec::new(),
             protoc_args: Vec::new(),
+            disable_comments: false,
         }
     }
 }
@@ -730,6 +749,7 @@ impl fmt::Debug for Config {
             .field("btree_map", &self.btree_map)
             .field("type_attributes", &self.type_attributes)
             .field("field_attributes", &self.field_attributes)
+            .field("field_type_attributes", &self.field_type_attributes)
             .field("prost_types", &self.prost_types)
             .field("strip_enum_prefix", &self.strip_enum_prefix)
             .field("out_dir", &self.out_dir)
