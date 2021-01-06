@@ -292,16 +292,10 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         msg_name: &str,
         field_type_name: &str,
-        optional: bool,
+        label: Label,
     ) {
-        let type_name = if optional {
-            format!("::core::option::Option<{}>", field_type_name)
-        } else {
-            field_type_name.to_string()
-        };
-
         for (matcher, attribute) in self.config.field_type_attributes.clone() {
-            if Self::match_field(&matcher, msg_name, &type_name) {
+            if Self::match_field(&matcher, msg_name, &field_type_name, label) {
                 self.push_indent();
                 self.buf.push_str(&attribute);
                 self.buf.push('\n');
@@ -309,7 +303,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn match_field(matcher: &str, msg: &str, field_type_name: &str) -> bool {
+    fn match_field(matcher: &str, msg: &str, field_type_name: &str, label: Label) -> bool {
         assert_eq!(b'.', msg.as_bytes()[0]);
 
         println!(
@@ -321,11 +315,51 @@ impl<'a> CodeGenerator<'a> {
 
         if matcher.is_empty() {
             return false;
-        } else if matcher == "." {
+        } else if matcher == "*" {
             return true;
         }
 
-        matcher == field_type_name
+        let types = Self::resolve_types(field_type_name);
+
+        match label {
+            Label::Repeated => {
+                if matcher == "Vec<*>" {
+                    return true;
+                }
+
+                for t in &types {
+                    if matcher == format!("Vec<{}>", t) {
+                        return true;
+                    }
+                }
+            }
+            Label::Optional => {
+                if matcher == "Option<*>" {
+                    return true;
+                }
+
+                for t in &types {
+                    if matcher == format!("Option<{}>", t) {
+                        return true;
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        types.contains(&matcher)
+    }
+
+    fn resolve_types<'b>(t: &'b str) -> Vec<&'b str> {
+        let mut types = vec![t];
+
+        let indices = t.match_indices("::");
+
+        for (index, _) in indices {
+            types.push(&t[index + 2..])
+        }
+
+        types
     }
 
     fn append_field(&mut self, msg_name: &str, field: FieldDescriptorProto) {
@@ -427,7 +461,7 @@ impl<'a> CodeGenerator<'a> {
 
         self.buf.push_str("\")]\n");
         self.append_field_attributes(msg_name, field.name());
-        self.append_field_type_attributes(msg_name, &ty, optional);
+        self.append_field_type_attributes(msg_name, &ty, field.label());
         self.push_indent();
         self.buf.push_str("pub ");
         self.buf.push_str(&to_snake(field.name()));
